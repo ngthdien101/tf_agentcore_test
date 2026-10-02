@@ -1,0 +1,64 @@
+---
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+pool:
+  name: cloud-platforms-pool
+  demands:
+    - Agent.OS -equals Linux
+    - terraform
+
+variables:
+  - group: aws-accounts
+  - group: azdo-iac-config
+  - group: aws-slack-notification-webhooks
+
+resources:
+  repositories:
+    - repository: templates
+      type: git
+      name: azure-devops-templates
+      ref: refs/tags/v1.86
+
+stages:
+  # Dev Stage
+  - template: terraform/stages/terraform-aws-deploy.yml@templates
+    parameters:
+      environment: dev
+      tfBackendConfigFile: backend/dev.backend.tfvars
+      tfParallelism: 10
+      tfWorkingDirectory: $(System.DefaultWorkingDirectory)
+      tfTimeoutInMinutes: 20
+      adoDeploymentEnvironment: qual-manual-approval
+      postPlanAsComment: true
+      awsAccountId: 537124933978
+      applicationId: SNSVC0011091
+      pipelineIAMRoleName: AzureDevOpsCloudPlatformsRole
+
+  # Prod Stage
+  - template: terraform/stages/terraform-aws-deploy.yml@templates
+    parameters:
+      branchCondition: eq(variables['Build.SourceBranch'], 'refs/heads/main')
+      environment: prod
+      tfBackendConfigFile: backend/prod.backend.tfvars
+      tfParallelism: 10
+      tfWorkingDirectory: $(System.DefaultWorkingDirectory)
+      tfTimeoutInMinutes: 20
+      adoDeploymentEnvironment: prod
+      postPlanAsComment: true
+      awsAccountId: 145808484722
+      applicationId: SNSVC0011092
+      pipelineIAMRoleName: AzureDevOpsCloudPlatformsRole
+      approvalEmails: |
+          [AirNZ]\Cloud Platforms
+      enableChangeManagement: true
+      changeTemplateQual: 'AWS Service Control Policy Modification (add/remove/modify)'
+      changeTemplateProd: 'AWS Service Control Policy Modification (add/remove/modify)'
+      changeOwnerGroup: 'Cloud Platform Support'
